@@ -136,8 +136,8 @@ object SatelliteCalculator {
         if (dEl < -verticalFOV / 2 || dEl > verticalFOV / 2) return null
 
         // 映射到屏幕坐标
-        val x = screenWidth / 2f + (dAz / (horizontalFOV / 2)) * (screenWidth / 2f)
-        val y = screenHeight / 2f - (dEl / (verticalFOV / 2)) * (screenHeight / 2f)
+        val x = (screenWidth / 2.0 + (dAz / (horizontalFOV / 2.0)) * (screenWidth / 2.0)).toFloat()
+        val y = (screenHeight / 2.0 - (dEl / (verticalFOV / 2.0)) * (screenHeight / 2.0)).toFloat()
 
         return Pair(x, y)
     }

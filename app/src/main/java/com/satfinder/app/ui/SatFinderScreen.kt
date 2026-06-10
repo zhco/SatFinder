@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,6 @@ fun SatFinderScreen(
     orientationProvider: OrientationProvider
 ) {
     var showSatelliteList by remember { mutableStateOf(false) }
-    var showInfoPanel by remember { mutableStateOf(true) }
 
     // 计算选中卫星的位置
     val satPosition = remember(location, selectedSatellite) {
@@ -93,8 +93,7 @@ fun SatFinderScreen(
             selectedSatellite = selectedSatellite,
             location = location,
             visibleCount = visibleSatellites.size,
-            onToggleList = { showSatelliteList = !showSatelliteList },
-            onToggleInfo = { showInfoPanel = !showInfoPanel }
+            onToggleList = { showSatelliteList = !showSatelliteList }
         )
 
         // 卫星选择列表弹窗
@@ -115,7 +114,6 @@ fun SatFinderScreen(
 
 /**
  * AR相机预览叠加层
- * 在相机预览上绘制卫星标记、指南针和方向指示
  */
 @Composable
 fun ARCameraOverlay(
@@ -133,131 +131,114 @@ fun ARCameraOverlay(
         drawRect(color = Color(0xFF0D1117))
 
         // 绘制地平线参考
-        drawHorizonLine(w, h, orientation.pitch)
+        val horizonY = h / 2f - (orientation.pitch / 45f) * (h / 2f)
+        if (horizonY in 0f..h) {
+            drawLine(
+                color = Color(0x40FFFFFF),
+                start = Offset(0f, horizonY),
+                end = Offset(w, horizonY),
+                strokeWidth = 1f
+            )
+        }
 
         // 绘制指南针刻度
-        drawCompassScale(w, h, orientation.azimuth)
+        val directions = listOf(
+            "N" to 0f, "NE" to 45f, "E" to 90f, "SE" to 135f,
+            "S" to 180f, "SW" to 225f, "W" to 270f, "NW" to 315f
+        )
+        directions.forEach { (label, angle) ->
+            var diff = angle - orientation.azimuth
+            if (diff > 180) diff -= 360
+            if (diff < -180) diff += 360
+            val x = w / 2f + (diff / 90f) * (w / 2f)
+            if (x in 0f..w) {
+                val tickLen = if (label.length == 1) 20f else 10f
+                drawLine(
+                    color = if (label == "N") AccentRed else Color(0x60FFFFFF),
+                    start = Offset(x, 0f),
+                    end = Offset(x, tickLen),
+                    strokeWidth = if (label == "N") 3f else 1f
+                )
+                drawContext.canvas.nativeCanvas.drawText(
+                    label,
+                    x - 10f,
+                    38f,
+                    android.graphics.Paint().apply {
+                        color = if (label == "N") android.graphics.Color.RED else android.graphics.Color.parseColor("#80FFFFFF")
+                        textSize = if (label.length == 1) 40f else 24f
+                        isAntiAlias = true
+                    }
+                )
+            }
+        }
 
         // 绘制十字准心
-        drawCrosshair(w, h)
+        val cx = w / 2f
+        val cy = h / 2f
+        drawLine(
+            color = Color(0x40FFFFFF),
+            start = Offset(cx - 30f, cy),
+            end = Offset(cx + 30f, cy),
+            strokeWidth = 1f
+        )
+        drawLine(
+            color = Color(0x40FFFFFF),
+            start = Offset(cx, cy - 30f),
+            end = Offset(cx, cy + 30f),
+            strokeWidth = 1f
+        )
+        drawCircle(
+            color = Color(0x40FFFFFF),
+            radius = 5f,
+            center = Offset(cx, cy),
+            style = Stroke(width = 1f)
+        )
+
+        // 绘制仰角刻度（左侧）
+        for (el in listOf(0, 15, 30, 45, 60, 75)) {
+            val y = h / 2f - (el / 45f) * (h / 2f)
+            if (y in 20f..(h - 20f)) {
+                drawLine(
+                    color = Color(0x30FFFFFF),
+                    start = Offset(0f, y),
+                    end = Offset(15f, y),
+                    strokeWidth = 1f
+                )
+                drawContext.canvas.nativeCanvas.drawText(
+                    "${el}°",
+                    18f,
+                    y - 5f,
+                    android.graphics.Paint().apply {
+                        color = android.graphics.Color.parseColor("#60FFFFFF")
+                        textSize = 20f
+                        isAntiAlias = true
+                    }
+                )
+            }
+        }
 
         // 绘制选中卫星标记
         satPosition?.let { pos ->
             if (pos.isVisible) {
-                drawSatelliteMarker(
-                    pos, orientation, w, h,
-                    isSelected = true
-                )
+                drawSatMarker(pos, orientation, w, h, true)
             }
         }
 
         // 绘制所有可见卫星标记
         visibleSatellites.forEach { pos ->
-            if (pos.satellite.isDefault) return@forEach  // 跳过已绘制的默认卫星
-            drawSatelliteMarker(
-                pos, orientation, w, h,
-                isSelected = false
-            )
-        }
-
-        // 绘制方向标签
-        drawDirectionLabels(w, h, orientation.azimuth)
-    }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHorizonLine(
-    w: Float, h: Float, pitch: Float
-) {
-    // 地平线位置
-    val horizonY = h / 2f - (pitch / 45f) * (h / 2f)
-
-    if (horizonY in 0f..h) {
-        drawLine(
-            color = Color(0x40FFFFFF),
-            start = Offset(0f, horizonY),
-            end = Offset(w, horizonY),
-            strokeWidth = 1f
-        )
-    }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCompassScale(
-    w: Float, h: Float, azimuth: Float
-) {
-    val directions = listOf(
-        "N" to 0f, "NE" to 45f, "E" to 90f, "SE" to 135f,
-        "S" to 180f, "SW" to 225f, "W" to 270f, "NW" to 315f
-    )
-
-    directions.forEach { (label, angle) ->
-        var diff = angle - azimuth
-        if (diff > 180) diff -= 360
-        if (diff < -180) diff += 360
-
-        val x = w / 2f + (diff / 90f) * (w / 2f)
-
-        if (x in 0f..w) {
-            // 刻度线
-            val tickLen = if (label.length == 1) 20f else 10f
-            drawLine(
-                color = if (label == "N") AccentRed else Color(0x60FFFFFF),
-                start = Offset(x, 0f),
-                end = Offset(x, tickLen),
-                strokeWidth = if (label == "N") 3f else 1f
-            )
-
-            // 标签
-            drawText(
-                textMeasurer = androidx.compose.ui.text.TextMeasurer(
-                    androidx.compose.ui.text.TextStyle(
-                        fontSize = if (label.length == 1) 16.sp else 10.sp,
-                        color = if (label == "N") AccentRed else Color(0x80FFFFFF)
-                    )
-                ),
-                text = label,
-                topLeft = Offset(x - 10f, 22f)
-            )
+            if (pos.satellite.isDefault) return@forEach
+            drawSatMarker(pos, orientation, w, h, false)
         }
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCrosshair(
-    w: Float, h: Float
-) {
-    val cx = w / 2f
-    val cy = h / 2f
-    val len = 30f
-
-    drawLine(
-        color = Color(0x40FFFFFF),
-        start = Offset(cx - len, cy),
-        end = Offset(cx + len, cy),
-        strokeWidth = 1f
-    )
-    drawLine(
-        color = Color(0x40FFFFFF),
-        start = Offset(cx, cy - len),
-        end = Offset(cx, cy + len),
-        strokeWidth = 1f
-    )
-
-    // 中心圆
-    drawCircle(
-        color = Color(0x40FFFFFF),
-        radius = 5f,
-        center = Offset(cx, cy),
-        style = Stroke(width = 1f)
-    )
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker(
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatMarker(
     pos: SatellitePosition,
     orientation: DeviceOrientation,
     w: Float,
     h: Float,
     isSelected: Boolean
 ) {
-    // 典型手机相机视场角
     val hFOV = 68.0
     val vFOV = 42.0
 
@@ -277,7 +258,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
         val markerColor = if (isSelected) AccentYellow else AccentCyan
         val markerRadius = if (isSelected) 18f else 12f
 
-        // 绘制引导线（从中心到卫星）
+        // 引导线
         if (isSelected) {
             drawLine(
                 color = GuideLineColor,
@@ -294,7 +275,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
             center = Offset(sx, sy),
             style = Stroke(width = if (isSelected) 3f else 2f)
         )
-
         // 内圈
         drawCircle(
             color = markerColor,
@@ -302,26 +282,21 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
             center = Offset(sx, sy)
         )
 
-        // 卫星名称标签
+        // 标签
         val label = if (isSelected) {
-            "${pos.satellite.name}\n${"%.1f".format(pos.azimuth)}° / ${"%.1f".format(pos.elevation)}°"
+            "${pos.satellite.name}\n%.1f° / %.1f°".format(pos.azimuth, pos.elevation)
         } else {
             pos.satellite.name
         }
 
-        drawText(
-            textMeasurer = androidx.compose.ui.text.TextMeasurer(
-                androidx.compose.ui.text.TextStyle(
-                    fontSize = if (isSelected) 14.sp else 11.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = SatelliteLabelColor
-                )
-            ),
-            text = label,
-            topLeft = Offset(sx + markerRadius + 8f, sy - 10f)
-        )
+        val paint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = if (isSelected) 28f else 22f
+            isAntiAlias = true
+        }
+        drawContext.canvas.nativeCanvas.drawText(label, sx + markerRadius + 8f, sy - 10f, paint)
     } else {
-        // 卫星不在视场内，绘制边缘箭头
+        // 边缘箭头
         val arrow = SatelliteCalculator.getEdgeArrowPosition(
             satAzimuth = pos.azimuth,
             satElevation = pos.elevation,
@@ -330,7 +305,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
             screenWidth = w.toInt(),
             screenHeight = h.toInt()
         )
-
         val (ax, ay, angle) = arrow
         val arrowColor = if (isSelected) AccentYellow else Color(0x80FFFFFF)
 
@@ -341,7 +315,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
                 end = Offset(ax + 20f, ay),
                 strokeWidth = 3f
             )
-            // 箭头头部
             drawLine(
                 color = arrowColor,
                 start = Offset(ax + 20f, ay),
@@ -356,45 +329,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteMarker
             )
         }
 
-        // 边缘标签
         if (isSelected) {
-            drawText(
-                textMeasurer = androidx.compose.ui.text.TextMeasurer(
-                    androidx.compose.ui.text.TextStyle(
-                        fontSize = 12.sp,
-                        color = AccentYellow,
-                        fontWeight = FontWeight.Bold
-                    )
-                ),
-                text = "${pos.satellite.name} ${"%.1f".format(pos.azimuth)}°",
-                topLeft = Offset(ax - 30f, ay + 15f)
-            )
-        }
-    }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionLabels(
-    w: Float, h: Float, azimuth: Float
-) {
-    // 仰角刻度（左侧）
-    for (el in listOf(0, 15, 30, 45, 60, 75)) {
-        val y = h / 2f - (el / 45f) * (h / 2f)
-        if (y in 20f..(h - 20f)) {
-            drawLine(
-                color = Color(0x30FFFFFF),
-                start = Offset(0f, y),
-                end = Offset(15f, y),
-                strokeWidth = 1f
-            )
-            drawText(
-                textMeasurer = androidx.compose.ui.text.TextMeasurer(
-                    androidx.compose.ui.text.TextStyle(
-                        fontSize = 9.sp,
-                        color = Color(0x60FFFFFF)
-                    )
-                ),
-                text = "${el}°",
-                topLeft = Offset(18f, y - 5f)
+            drawContext.canvas.nativeCanvas.drawText(
+                "${pos.satellite.name} %.1f°".format(pos.azimuth),
+                ax - 30f,
+                ay + 15f,
+                android.graphics.Paint().apply {
+                    color = android.graphics.Color.YELLOW
+                    textSize = 24f
+                    isAntiAlias = true
+                }
             )
         }
     }
@@ -423,7 +367,6 @@ fun TopStatusBar(
         Column(
             modifier = Modifier.padding(12.dp)
         ) {
-            // 卫星名称
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -454,10 +397,9 @@ fun TopStatusBar(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 位置信息
             if (location != null) {
                 Text(
-                    text = "GPS: ${"%.4f".format(location.latitude)}, ${"%.4f".format(location.longitude)} | 精度: ${"%.0f".format(location.accuracy)}m",
+                    text = "GPS: %.4f, %.4f | 精度: %.0fm".format(location.latitude, location.longitude, location.accuracy),
                     color = TextSecondary,
                     fontSize = 11.sp
                 )
@@ -482,11 +424,9 @@ fun BottomInfoPanel(
     selectedSatellite: Satellite,
     location: GpsLocation?,
     visibleCount: Int,
-    onToggleList: () -> Unit,
-    onToggleInfo: () -> Unit
+    onToggleList: () -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        // 卫星参数面板
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -498,7 +438,6 @@ fun BottomInfoPanel(
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 if (satPosition != null) {
-                    // 三列数据
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -525,7 +464,6 @@ fun BottomInfoPanel(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 额外信息
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -565,14 +503,12 @@ fun BottomInfoPanel(
             }
         }
 
-        // 底部操作栏
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // 卫星列表按钮
             OutlinedButton(
                 onClick = onToggleList,
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -728,13 +664,13 @@ private fun SatelliteListItem(
             if (elevation != null && azimuth != null) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "仰角 ${"%.1f".format(elevation)}°",
+                        text = "仰角 %.1f°".format(elevation),
                         color = if (elevation > 0) AccentGreen else AccentRed,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "方位 ${"%.1f".format(azimuth)}°",
+                        text = "方位 %.1f°".format(azimuth),
                         color = TextSecondary,
                         fontSize = 11.sp
                     )
