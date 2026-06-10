@@ -2,7 +2,23 @@ package com.satfinder.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +59,7 @@ fun SatFinderScreen(
     orientationProvider: OrientationProvider
 ) {
     var showSatelliteList by remember { mutableStateOf(false) }
+    var showManualLocation by remember { mutableStateOf(false) }
 
     // 计算选中卫星的位置
     val satPosition = remember(location, selectedSatellite) {
@@ -93,7 +110,8 @@ fun SatFinderScreen(
             selectedSatellite = selectedSatellite,
             location = location,
             visibleCount = visibleSatellites.size,
-            onToggleList = { showSatelliteList = !showSatelliteList }
+            onToggleList = { showSatelliteList = !showSatelliteList },
+            onManualLocation = { showManualLocation = true }
         )
 
         // 卫星选择列表弹窗
@@ -107,6 +125,14 @@ fun SatFinderScreen(
                     showSatelliteList = false
                 },
                 onDismiss = { showSatelliteList = false }
+            )
+        }
+
+        // 手动输入坐标弹窗
+        if (showManualLocation) {
+            ManualLocationDialog(
+                locationProvider = locationProvider,
+                onDismiss = { showManualLocation = false }
             )
         }
     }
@@ -415,6 +441,126 @@ fun TopStatusBar(
 }
 
 /**
+ * 手动输入经纬度对话框
+ */
+@Composable
+fun ManualLocationDialog(
+    locationProvider: LocationProvider,
+    onDismiss: () -> Unit
+) {
+    var latText by remember { mutableStateOf("") }
+    var lonText by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+
+    // 预填一些常用城市坐标
+    val cityPresets = listOf(
+        "北京" to "39.9042,116.4074",
+        "上海" to "31.2304,121.4737",
+        "广州" to "23.1291,113.2644",
+        "成都" to "30.5728,104.0668",
+        "乌鲁木齐" to "43.8256,87.6168"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "手动输入位置",
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "输入您的经纬度坐标（北纬为正，东经为正）",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = latText,
+                    onValueChange = { latText = it; errorText = "" },
+                    label = { Text("纬度", color = TextSecondary) },
+                    placeholder = { Text("例: 39.9042", color = TextDim) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentGreen,
+                        unfocusedBorderColor = TextDim
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = lonText,
+                    onValueChange = { lonText = it; errorText = "" },
+                    label = { Text("经度", color = TextSecondary) },
+                    placeholder = { Text("例: 116.4074", color = TextDim) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentGreen,
+                        unfocusedBorderColor = TextDim
+                    )
+                )
+
+                if (errorText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = errorText, color = AccentRed, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("快速选择城市:", color = TextSecondary, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+
+                cityPresets.forEach { (city, coords) ->
+                    TextButton(
+                        onClick = {
+                            val parts = coords.split(",")
+                            latText = parts[0]
+                            lonText = parts[1]
+                            errorText = ""
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "$city ($coords)",
+                            color = AccentCyan,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val lat = latText.toDoubleOrNull()
+                val lon = lonText.toDoubleOrNull()
+                if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
+                    locationProvider.setManualLocation(lat, lon)
+                    onDismiss()
+                } else {
+                    errorText = "请输入有效的经纬度（纬度-90~90，经度-180~180）"
+                }
+            }) {
+                Text("确定", color = AccentGreen)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消", color = TextSecondary)
+            }
+        }
+    )
+}
+
+/**
  * 底部信息面板
  */
 @Composable
@@ -424,7 +570,8 @@ fun BottomInfoPanel(
     selectedSatellite: Satellite,
     location: GpsLocation?,
     visibleCount: Int,
-    onToggleList: () -> Unit
+    onToggleList: () -> Unit,
+    onManualLocation: () -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Card(
@@ -499,6 +646,13 @@ fun BottomInfoPanel(
                         fontSize = 14.sp,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onManualLocation,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("手动输入经纬度", color = AccentCyan, fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -518,6 +672,16 @@ fun BottomInfoPanel(
                 Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("卫星列表 (${visibleCount}颗可见)", fontSize = 12.sp)
+            }
+            OutlinedButton(
+                onClick = onManualLocation,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = AccentOrange
+                )
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("手动定位", fontSize = 12.sp)
             }
         }
 

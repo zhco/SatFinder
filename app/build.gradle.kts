@@ -12,8 +12,8 @@ android {
         applicationId = "com.satfinder.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -60,9 +60,6 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.camera:camera-view:$cameraXVersion")
-
-    // Google Play Services - Location
-    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
