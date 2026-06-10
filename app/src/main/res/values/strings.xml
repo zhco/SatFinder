@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">卫星寻星器</string>
+    <string name="camera_preview">相机预览</string>
+    <string name="location_permission_rationale">需要GPS定位权限来计算卫星方位角和仰角</string>
+    <string name="camera_permission_rationale">需要相机权限来使用AR寻星指示功能</string>
+    <string name="permission_denied">权限被拒绝，应用无法正常工作</string>
+    <string name="waiting_location">正在获取GPS位置…</string>
+    <string name="no_satellite_visible">当前方向无可见卫星</string>
+    <string name="azimuth">方位角</string>
+    <string name="elevation">仰角</string>
+    <string name="polarization">极化角</string>
+    <string name="select_satellite">选择卫星</string>
+    <string name="current_location">当前位置</string>
+    <string name="satellite_info">卫星信息</string>
+    <string name="degree_symbol">°</string>
+</resources>
