@@ -2,20 +2,29 @@ package com.satfinder.app.satellite
 
 import com.satfinder.app.model.Satellite
 import com.satfinder.app.model.SatellitePosition
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * 卫星位置计算核心算法
- * 基于球面三角学和地球同步轨道参数
+ * 使用ECF矢量法（地心固定坐标系）计算方位角和仰角
+ * 参考: CelesTrak (Dr. T.S. Kelso) 和 Australian Space Academy
  */
 object SatelliteCalculator {
 
-    private const val EARTH_RADIUS = 6371.0    // 地球半径 km
-    private const val ORBIT_HEIGHT = 35786.0   // 地球同步轨道高度 km
-    private const val RATIO = EARTH_RADIUS / (EARTH_RADIUS + ORBIT_HEIGHT) // ≈ 0.1509
+    // 使用WGS84椭球参数
+    private const val EARTH_RADIUS = 6378.137   // 地球赤道半径 km
+    private const val ORBIT_RADIUS = 42164.0     // 地球同步轨道半径 km (地球半径+35786km)
 
     /**
-     * 计算卫星方位角 (Azimuth)
+     * 使用ECF矢量法计算卫星方位角 (Azimuth)
      * 从真北顺时针方向, 0°=北, 90°=东, 180°=南, 270°=西
+     *
+     * 原理: 在观测者本地ENU(东-北-天)坐标系中分解卫星方向矢量,
+     * 方位角 = atan2(East, North)
      *
      * @param lat 用户纬度 (北纬为正, 南纬为负)
      * @param lon 用户经度 (东经为正, 西经为负)
@@ -24,22 +33,35 @@ object SatelliteCalculator {
      */
     fun calculateAzimuth(lat: Double, lon: Double, satLon: Double): Double {
         val phi = Math.toRadians(lat)
-        val deltaLambda = Math.toRadians(satLon - lon)
+        val theta = Math.toRadians(lon)
+        val lambda = Math.toRadians(satLon)
 
-        // 使用 atan2 自动处理象限
-        val azimuth = Math.toDegrees(
-            Math.atan2(
-                Math.sin(deltaLambda),
-                Math.tan(phi) * Math.cos(deltaLambda)
-            )
-        )
+        // 卫星在ECF坐标系中的位置
+        val sx = ORBIT_RADIUS * cos(lambda)
+        val sy = ORBIT_RADIUS * sin(lambda)
+        val sz = 0.0
 
-        // 转换为从正北顺时针 0°~360°
+        // 观测者在ECF坐标系中的位置
+        val ox = EARTH_RADIUS * cos(phi) * cos(theta)
+        val oy = EARTH_RADIUS * cos(phi) * sin(theta)
+        val oz = EARTH_RADIUS * sin(phi)
+
+        // 距离矢量
+        val rx = sx - ox
+        val ry = sy - oy
+        val rz = sz - oz
+
+        // 在ENU坐标系中分解
+        val east = rx * (-sin(theta)) + ry * cos(theta)
+        val north = rx * (-sin(phi) * cos(theta)) + ry * (-sin(phi) * sin(theta)) + rz * cos(phi)
+
+        // 方位角 = atan2(East, North)
+        val azimuth = Math.toDegrees(atan2(east, north))
         return (azimuth + 360.0) % 360.0
     }
 
     /**
-     * 计算卫星仰角 (Elevation)
+     * 使用ECF矢量法计算卫星仰角 (Elevation)
      *
      * @param lat 用户纬度
      * @param lon 用户经度
@@ -48,17 +70,32 @@ object SatelliteCalculator {
      */
     fun calculateElevation(lat: Double, lon: Double, satLon: Double): Double {
         val phi = Math.toRadians(lat)
-        val deltaLambda = Math.toRadians(satLon - lon)
+        val theta = Math.toRadians(lon)
+        val lambda = Math.toRadians(satLon)
 
-        // 中心角 γ 的余弦
-        val cosGamma = Math.cos(deltaLambda) * Math.cos(phi)
-        // 中心角 γ 的正弦
-        val sinGamma = Math.sqrt(1.0 - cosGamma * cosGamma)
+        // 卫星在ECF坐标系中的位置
+        val sx = ORBIT_RADIUS * cos(lambda)
+        val sy = ORBIT_RADIUS * sin(lambda)
+        val sz = 0.0
 
-        if (sinGamma < 1e-10) return 90.0  // 用户恰好在卫星正下方
+        // 观测者在ECF坐标系中的位置
+        val ox = EARTH_RADIUS * cos(phi) * cos(theta)
+        val oy = EARTH_RADIUS * cos(phi) * sin(theta)
+        val oz = EARTH_RADIUS * sin(phi)
 
-        val tanEl = (cosGamma - RATIO) / sinGamma
-        return Math.toDegrees(Math.atan(tanEl))
+        // 距离矢量
+        val rx = sx - ox
+        val ry = sy - oy
+        val rz = sz - oz
+
+        // 在ENU坐标系中分解
+        val east = rx * (-sin(theta)) + ry * cos(theta)
+        val north = rx * (-sin(phi) * cos(theta)) + ry * (-sin(phi) * sin(theta)) + rz * cos(phi)
+        val up = rx * cos(phi) * cos(theta) + ry * cos(phi) * sin(theta) + rz * sin(phi)
+
+        // 仰角 = atan2(Up, sqrt(East² + North²))
+        val horizontal = sqrt(east * east + north * north)
+        return Math.toDegrees(atan2(up, horizontal))
     }
 
     /**
@@ -72,11 +109,12 @@ object SatelliteCalculator {
      */
     fun calculatePolarizationAngle(lat: Double, lon: Double, satLon: Double): Double {
         val phi = Math.toRadians(lat)
-        val deltaLambda = Math.toRadians(satLon - lon)
+        // 使用观测者经度 - 卫星经度
+        val B = Math.toRadians(lon - satLon)
 
-        return Math.toDegrees(
-            Math.atan(Math.sin(deltaLambda) / Math.tan(phi))
-        )
+        // 标准极化角公式
+        val pol = Math.toDegrees(atan2(sin(B), tan(phi)))
+        return pol
     }
 
     /**
@@ -103,16 +141,6 @@ object SatelliteCalculator {
     /**
      * 计算卫星在屏幕上的位置
      * 将卫星方位角/仰角映射到相机预览的屏幕坐标
-     *
-     * @param satAzimuth 卫星真方位角
-     * @param satElevation 卫星仰角
-     * @param deviceAzimuth 设备当前方位角
-     * @param devicePitch 设备当前俯仰角
-     * @param screenWidth 屏幕宽度
-     * @param screenHeight 屏幕高度
-     * @param horizontalFOV 相机水平视场角 (度)
-     * @param verticalFOV 相机垂直视场角 (度)
-     * @return 屏幕坐标 (x, y), null表示不在视场内
      */
     fun satelliteToScreenPosition(
         satAzimuth: Double,
@@ -124,18 +152,14 @@ object SatelliteCalculator {
         horizontalFOV: Double,
         verticalFOV: Double
     ): Pair<Float, Float>? {
-        // 计算卫星相对于设备视线中心的角差
         var dAz = satAzimuth - deviceAzimuth
-        // 处理跨越0°/360°的情况
         if (dAz > 180) dAz -= 360
         if (dAz < -180) dAz += 360
         val dEl = satElevation - devicePitch
 
-        // 判断是否在视场范围内
         if (Math.abs(dAz) > horizontalFOV / 2) return null
         if (dEl < -verticalFOV / 2 || dEl > verticalFOV / 2) return null
 
-        // 映射到屏幕坐标
         val x = (screenWidth / 2.0 + (dAz / (horizontalFOV / 2.0)) * (screenWidth / 2.0)).toFloat()
         val y = (screenHeight / 2.0 - (dEl / (verticalFOV / 2.0)) * (screenHeight / 2.0)).toFloat()
 
@@ -144,9 +168,6 @@ object SatelliteCalculator {
 
     /**
      * 计算卫星在屏幕边缘的箭头指示方向
-     * 当卫星不在视场内时，在屏幕边缘显示方向箭头
-     *
-     * @return 箭头在屏幕边缘的位置 (x, y) 和旋转角度
      */
     fun getEdgeArrowPosition(
         satAzimuth: Double,
@@ -162,11 +183,9 @@ object SatelliteCalculator {
         if (dAz < -180) dAz += 360
         val dEl = satElevation - devicePitch
 
-        // 归一化角度差到 -1~1 范围
         val normAz = (dAz / 180.0).coerceIn(-1.0, 1.0)
         val normEl = (dEl / 90.0).coerceIn(-1.0, 1.0)
 
-        // 计算箭头在边缘的位置
         val cx = screenWidth / 2f
         val cy = screenHeight / 2f
         val halfW = screenWidth / 2f - margin
@@ -175,7 +194,6 @@ object SatelliteCalculator {
         val x = cx + normAz.toFloat() * halfW
         val y = cy - normEl.toFloat() * halfH
 
-        // 箭头旋转角度 (指向卫星方向)
         val angle = Math.toDegrees(Math.atan2(-dEl, dAz)).toFloat()
 
         return Triple(

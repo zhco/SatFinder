@@ -243,6 +243,9 @@ fun ARCameraOverlay(
             }
         }
 
+        // ===== 雷达图：显示所有可见卫星的方位角和仰角 =====
+        drawRadarView(visibleSatellites, satPosition, w, h)
+
         // 绘制选中卫星标记
         satPosition?.let { pos ->
             if (pos.isVisible) {
@@ -436,6 +439,113 @@ fun TopStatusBar(
                     fontSize = 11.sp
                 )
             }
+        }
+    }
+}
+
+/**
+ * 雷达图：在AR视图右上角显示所有可见卫星的方位角分布
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRadarView(
+    visibleSatellites: List<SatellitePosition>,
+    satPosition: SatellitePosition?,
+    w: Float,
+    h: Float
+) {
+    val radarRadius = 70f
+    val cx = w - radarRadius - 20f
+    val cy = radarRadius + 80f
+
+    // 半透明背景圆
+    drawCircle(
+        color = Color(0x30FFFFFF),
+        radius = radarRadius,
+        center = Offset(cx, cy)
+    )
+    drawCircle(
+        color = Color(0x20FFFFFF),
+        radius = radarRadius,
+        center = Offset(cx, cy),
+        style = Stroke(width = 1f)
+    )
+
+    // 同心圆（仰角参考线）
+    for (r in listOf(radarRadius * 0.33f, radarRadius * 0.66f)) {
+        drawCircle(
+            color = Color(0x15FFFFFF),
+            radius = r,
+            center = Offset(cx, cy),
+            style = Stroke(width = 0.5f)
+        )
+    }
+
+    // 十字线
+    drawLine(
+        color = Color(0x20FFFFFF),
+        start = Offset(cx - radarRadius, cy),
+        end = Offset(cx + radarRadius, cy),
+        strokeWidth = 0.5f
+    )
+    drawLine(
+        color = Color(0x20FFFFFF),
+        start = Offset(cx, cy - radarRadius),
+        end = Offset(cx, cy + radarRadius),
+        strokeWidth = 0.5f
+    )
+
+    // 方向标签
+    val paint = android.graphics.Paint().apply {
+        color = android.graphics.Color.parseColor("#80FFFFFF")
+        textSize = 18f
+        isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText("N", cx - 5f, cy - radarRadius - 4f, paint)
+    drawContext.canvas.nativeCanvas.drawText("S", cx - 5f, cy + radarRadius + 14f, paint)
+    drawContext.canvas.nativeCanvas.drawText("E", cx + radarRadius + 4f, cy + 5f, paint)
+    drawContext.canvas.nativeCanvas.drawText("W", cx - radarRadius - 12f, cy + 5f, paint)
+
+    // 标题
+    val titlePaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.parseColor("#B0BEC5")
+        textSize = 20f
+        isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText("卫星雷达", cx - 30f, cy - radarRadius - 22f, titlePaint)
+
+    // 绘制卫星点
+    visibleSatellites.forEach { pos ->
+        // 将方位角映射到雷达图坐标
+        // 方位角0°=北(上), 90°=东(右), 180°=南(下), 270°=西(左)
+        val azRad = Math.toRadians(pos.azimuth - 90) // 调整使0°(北)在上方
+        // 仰角越高，点越靠近中心
+        val dist = radarRadius * (1.0f - (pos.elevation.toFloat() / 90.0f))
+
+        val sx = cx + dist * Math.cos(azRad).toFloat()
+        val sy = cy + dist * Math.sin(azRad).toFloat()
+
+        val isSelected = satPosition != null && pos.satellite.name == satPosition.satellite.name
+        val dotColor = if (isSelected) AccentYellow else AccentCyan
+        val dotRadius = if (isSelected) 6f else 3.5f
+
+        drawCircle(
+            color = dotColor,
+            radius = dotRadius,
+            center = Offset(sx, sy)
+        )
+
+        // 选中卫星显示名称
+        if (isSelected) {
+            val namePaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.YELLOW
+                textSize = 18f
+                isAntiAlias = true
+            }
+            drawContext.canvas.nativeCanvas.drawText(
+                "%.0f°".format(pos.azimuth),
+                sx + 8f,
+                sy - 4f,
+                namePaint
+            )
         }
     }
 }
