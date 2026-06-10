@@ -153,23 +153,31 @@ class SatelliteCalculatorTest {
     @Test
     fun testCrossValidation_WithKnownReferences() {
         // 使用多个已知参考点交叉验证
-        val testCases = listOf(
-            // (城市, 纬度, 经度, 卫星经度, 预期方位角范围, 预期仰角范围)
-            Triple(Triple(39.9042, 116.4074), 92.2, Pair(200.0, 220.0) to Pair(35.0, 45.0)),
+        data class TestCase(
+            val lat: Double,
+            val lon: Double,
+            val satLon: Double,
+            val azMin: Double,
+            val azMax: Double,
+            val elMin: Double,
+            val elMax: Double
         )
 
-        testCases.forEach { (location, satLon, (azRange, elRange)) ->
-            val (lat, lon) = location
-            val az = SatelliteCalculator.calculateAzimuth(lat, lon, satLon)
-            val el = SatelliteCalculator.calculateElevation(lat, lon, satLon)
+        val testCases = listOf(
+            TestCase(39.9042, 116.4074, 92.2, 200.0, 220.0, 35.0, 45.0),
+        )
 
-            assert(az in azRange.first..azRange.second) {
-                "方位角验证失败: 位置($lat, $lon)->卫星($satLon), " +
-                "预期${azRange.first}~${azRange.second}, 实际${"%.2f".format(az)}"
+        testCases.forEach { tc ->
+            val az = SatelliteCalculator.calculateAzimuth(tc.lat, tc.lon, tc.satLon)
+            val el = SatelliteCalculator.calculateElevation(tc.lat, tc.lon, tc.satLon)
+
+            assert(az in tc.azMin..tc.azMax) {
+                "方位角验证失败: 位置(${tc.lat}, ${tc.lon})->卫星(${tc.satLon}), " +
+                "预期${tc.azMin}~${tc.azMax}, 实际${"%.2f".format(az)}"
             }
-            assert(el in elRange.first..elRange.second) {
-                "仰角验证失败: 位置($lat, $lon)->卫星($satLon), " +
-                "预期${elRange.first}~${elRange.second}, 实际${"%.2f".format(el)}"
+            assert(el in tc.elMin..tc.elMax) {
+                "仰角验证失败: 位置(${tc.lat}, ${tc.lon})->卫星(${tc.satLon}), " +
+                "预期${tc.elMin}~${tc.elMax}, 实际${"%.2f".format(el)}"
             }
         }
 
