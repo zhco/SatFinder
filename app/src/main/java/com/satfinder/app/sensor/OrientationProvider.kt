@@ -112,11 +112,11 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
             rotationMatrix, rotationVectorValues
         )
 
-        // 重映射坐标系（横屏持握 - 屏幕朝上，长边水平）
+        // 重映射坐标系（屏幕朝上平放 - Z轴指向上方）
         SensorManager.remapCoordinateSystem(
             rotationMatrix,
-            SensorManager.AXIS_MINUS_Y,
             SensorManager.AXIS_X,
+            SensorManager.AXIS_Y,
             remappedMatrix
         )
 
@@ -136,11 +136,11 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         )
         if (!success) return
 
-        // 重映射坐标系（横屏持握 - 屏幕朝上，长边水平）
+        // 重映射坐标系（屏幕朝上平放 - Z轴指向上方）
         SensorManager.remapCoordinateSystem(
             rotationMatrix,
-            SensorManager.AXIS_MINUS_Y,
             SensorManager.AXIS_X,
+            SensorManager.AXIS_Y,
             remappedMatrix
         )
 
