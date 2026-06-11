@@ -360,16 +360,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
     val arrowDist = if (w < h) w * 0.35f else h * 0.35f
 
     // 将角度差转换为屏幕坐标偏移
-    val dx = dAz / 90f * arrowDist
-    val dy = -dEl / 45f * arrowDist
+    val dx = (dAz / 90.0 * arrowDist).toFloat()
+    val dy = (-dEl / 45.0 * arrowDist).toFloat()
 
     // 归一化到边缘
     val dist = dx * dx + dy * dy
     val maxDist = arrowDist * arrowDist
-    val scale = if (dist > maxDist) arrowDist / kotlin.math.sqrt(dist) else 1f
+    val scale = if (dist > maxDist) arrowDist / kotlin.math.sqrt(dist.toDouble()).toFloat() else 1f
 
-    val arrowX = cx + dx * scale.toFloat()
-    val arrowY = cy + dy * scale.toFloat()
+    val arrowX = cx + dx * scale
+    val arrowY = cy + dy * scale
 
     val arrowColor = if (isSelected) AccentYellow else AccentCyan
 
@@ -385,7 +385,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
 
     // 绘制大箭头
     val arrowSize = if (isSelected) 30f else 18f
-    val angleRad = kotlin.math.atan2(arrowY - cy, arrowX - cx)
+    val angleRad = kotlin.math.atan2((arrowY - cy).toDouble(), (arrowX - cx).toDouble())
     val cosA = kotlin.math.cos(angleRad).toFloat()
     val sinA = kotlin.math.sin(angleRad).toFloat()
 
@@ -417,7 +417,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
             isAntiAlias = true
         }
         val label = "${pos.satellite.name} ${"%.0f".format(pos.azimuth)}° ${"%.0f".format(pos.elevation)}°"
-        val labelOffsetY = if (arrowY.compareTo(cy) > 0) 35f else -15f
+        val labelOffsetY = if (arrowY > cy) 35f else -15f
         drawContext.canvas.nativeCanvas.drawText(
             label,
             arrowX - 60f,
