@@ -172,7 +172,9 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
             declinationSet = true
         }
 
-        val trueAzimuth = (azimuth + declination + 360f) % 360f
+        // 磁偏角修正（真北）- 暂时禁用，直接显示磁方位角
+        // val trueAzimuth = (azimuth + declination + 360f) % 360f
+        val trueAzimuth = azimuth
 
         // 低通滤波平滑
         // 方位角需要处理0°/360°跨越
