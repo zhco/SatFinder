@@ -171,7 +171,7 @@ fun CompassView(
             val h = size.height
             val cx = w / 2f
             val cy = h / 2f
-            val radius = kotlin.math.min(w, h) * 0.40f
+            val radius = kotlin.math.min(w, h) * 0.38f
 
             // 外圈
             drawCircle(
@@ -189,17 +189,20 @@ fun CompassView(
                 style = Stroke(width = 1f)
             )
 
-            // 刻度线 - 随设备方位角旋转
+            // 刻度线 - 固定不旋转！0°在上(北)，顺时针增加
             for (deg in 0 until 360 step 5) {
-                val angle = Math.toRadians(deg.toDouble() - orientation.azimuth.toDouble())
+                // 标准罗盘：0°=北(上)，角度顺时针增加
+                // 在Canvas中，0°是右方(东)，所以需要转换
+                // 罗盘角度0°(北) -> Canvas角度 -90°(上方)
+                val canvasAngle = Math.toRadians(deg.toDouble() - 90.0)
                 val isMajor = deg % 30 == 0
                 val innerR = if (isMajor) radius * 0.78f else radius * 0.85f
                 val outerR = radius * 0.92f
 
-                val x1 = cx + innerR * cos(angle).toFloat()
-                val y1 = cy + innerR * sin(angle).toFloat()
-                val x2 = cx + outerR * cos(angle).toFloat()
-                val y2 = cy + outerR * sin(angle).toFloat()
+                val x1 = cx + innerR * cos(canvasAngle).toFloat()
+                val y1 = cy + innerR * sin(canvasAngle).toFloat()
+                val x2 = cx + outerR * cos(canvasAngle).toFloat()
+                val y2 = cy + outerR * sin(canvasAngle).toFloat()
 
                 drawLine(
                     color = if (isMajor) Color(0x60FFFFFF) else Color(0x30FFFFFF),
@@ -218,14 +221,16 @@ fun CompassView(
 
             // 绘制卫星指针和标记
             satPosition?.let { pos ->
-                var azDiff = pos.azimuth - orientation.azimuth
-                if (azDiff > 180) azDiff -= 360
-                if (azDiff < -180) azDiff += 360
+                // 卫星相对方位角 = 卫星方位角 - 设备方位角
+                var relativeAz = pos.azimuth - orientation.azimuth
+                if (relativeAz > 180) relativeAz -= 360
+                if (relativeAz < -180) relativeAz += 360
 
-                val pointerAngle = Math.toRadians(azDiff)
+                // 转换为Canvas角度 (罗盘0°=北/上，Canvas 0°=东/右)
+                val canvasAngle = Math.toRadians(relativeAz - 90.0)
                 val pointerLen = radius * 0.55f
-                val px = cx + pointerLen * cos(pointerAngle).toFloat()
-                val py = cy + pointerLen * sin(pointerAngle).toFloat()
+                val px = cx + pointerLen * cos(canvasAngle).toFloat()
+                val py = cy + pointerLen * sin(canvasAngle).toFloat()
 
                 // 指针线 (蓝色)
                 drawLine(
@@ -256,43 +261,25 @@ fun CompassView(
                     end = Offset(px, py + crossSize),
                     strokeWidth = 3f
                 )
-
-                // 偏差弧线 (当偏差较小时显示绿色弧)
-                if (kotlin.math.abs(azDiff) < 30) {
-                    val arcColor = if (kotlin.math.abs(azDiff) < 5) AccentGreen else AccentOrange
-                    // 在正确方向画一小段弧线
-                    val arcRadius = radius * 0.95f
-                    val startAngle = Math.toRadians(azDiff - 5)
-                    val endAngle = Math.toRadians(azDiff + 5)
-                    // 简化：画一条短线标记正确方向
-                    val markX = cx + arcRadius * cos(pointerAngle).toFloat()
-                    val markY = cy + arcRadius * sin(pointerAngle).toFloat()
-                    drawCircle(
-                        color = arcColor.copy(alpha = 0.5f),
-                        radius = 8f,
-                        center = Offset(markX, markY)
-                    )
-                }
             }
         }
 
         // 固定方向标签 (北在上，南在下，东在右，西在左)
-        // 这些标签不随罗盘旋转，固定在屏幕四个方向
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Text("北", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp))
+                modifier = Modifier.padding(top = 4.dp))
         }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Text("南", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp))
+                modifier = Modifier.padding(bottom = 4.dp))
         }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
             Text("东", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 8.dp))
+                modifier = Modifier.padding(end = 4.dp))
         }
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
             Text("西", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp))
+                modifier = Modifier.padding(start = 4.dp))
         }
 
         // 中央偏差数值
@@ -314,10 +301,10 @@ fun CompassView(
             }
 
             // 卫星名称 (在指针方向)
-            var azDiff = pos.azimuth - orientation.azimuth
-            if (azDiff > 180) azDiff -= 360
-            if (azDiff < -180) azDiff += 360
-            val angleRad = Math.toRadians(azDiff)
+            var relativeAz = pos.azimuth - orientation.azimuth
+            if (relativeAz > 180) relativeAz -= 360
+            if (relativeAz < -180) relativeAz += 360
+            val canvasAngle = Math.toRadians(relativeAz - 90.0)
             val nameR = 0.30f
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -327,8 +314,8 @@ fun CompassView(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.offset(
-                        x = (nameR * cos(angleRad) * 250).dp,
-                        y = (nameR * sin(angleRad) * 250).dp + 25.dp
+                        x = (nameR * cos(canvasAngle) * 250).dp,
+                        y = (nameR * sin(canvasAngle) * 250).dp + 25.dp
                     )
                 )
             }
