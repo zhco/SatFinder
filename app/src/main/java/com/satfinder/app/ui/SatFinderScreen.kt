@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.satfinder.app.model.*
@@ -133,7 +134,6 @@ fun TopBar(
                 fontWeight = FontWeight.Bold
             )
 
-            // 状态提示
             val statusText = if (satPosition != null) {
                 val dAz = kotlin.math.abs(satPosition.azimuth - orientation.azimuth)
                 val dEl = kotlin.math.abs(satPosition.elevation - orientation.pitch)
@@ -159,152 +159,178 @@ fun CompassView(
     orientation: DeviceOrientation,
     satPosition: SatellitePosition?
 ) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2f
-        val cy = h / 2f
-        val radius = kotlin.math.min(w, h) * 0.42f
+    // 计算卫星相对于设备的方向
+    var dAz by remember { mutableStateOf(0.0) }
+    var pointerX by remember { mutableStateOf(0f) }
+    var pointerY by remember { mutableStateOf(0f) }
+    var diffText by remember { mutableStateOf("") }
 
-        // 外圈
-        drawCircle(
-            color = Color(0x30FFFFFF),
-            radius = radius,
-            center = Offset(cx, cy),
-            style = Stroke(width = 2f)
-        )
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h / 2f
+            val radius = kotlin.math.min(w, h) * 0.42f
 
-        // 内圈
-        drawCircle(
-            color = Color(0x15FFFFFF),
-            radius = radius * 0.85f,
-            center = Offset(cx, cy),
-            style = Stroke(width = 1f)
-        )
-
-        // 刻度线 (每5度一条，每30度一条长刻度)
-        for (deg in 0 until 360 step 5) {
-            val angle = Math.toRadians(deg.toDouble() - orientation.azimuth.toDouble())
-            val isMajor = deg % 30 == 0
-            val innerR = if (isMajor) radius * 0.78f else radius * 0.85f
-            val outerR = radius * 0.92f
-
-            val x1 = cx + innerR * cos(angle).toFloat()
-            val y1 = cy + innerR * sin(angle).toFloat()
-            val x2 = cx + outerR * cos(angle).toFloat()
-            val y2 = cy + outerR * sin(angle).toFloat()
-
-            drawLine(
-                color = if (isMajor) Color(0x60FFFFFF) else Color(0x30FFFFFF),
-                start = Offset(x1, y1),
-                end = Offset(x2, y2),
-                strokeWidth = if (isMajor) 2f else 1f
-            )
-        }
-
-        // 方向标签 (固定在罗盘上，随罗盘旋转)
-        val directions = listOf(
-            "北" to 0f, "东" to 90f, "南" to 180f, "西" to 270f
-        )
-        val labelPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.WHITE
-            textSize = 36f
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-        val labelR = radius * 0.68f
-        directions.forEach { (label, deg) ->
-            val angle = Math.toRadians(deg - orientation.azimuth.toDouble())
-            val lx = cx + labelR * cos(angle).toFloat()
-            val ly = cy + labelR * sin(angle).toFloat() + 12f
-            drawContext.canvas.nativeCanvas.drawText(label, lx, ly, labelPaint)
-        }
-
-        // 中心点
-        drawCircle(
-            color = Color(0x40FFFFFF),
-            radius = 4f,
-            center = Offset(cx, cy)
-        )
-
-        // 绘制卫星指针和标记
-        satPosition?.let { pos ->
-            // 计算卫星相对于设备的方向
-            var dAz = pos.azimuth - orientation.azimuth
-            if (dAz > 180) dAz -= 360
-            if (dAz < -180) dAz += 360
-            val dEl = pos.elevation - orientation.pitch
-
-            // 蓝色指针 - 指向卫星方向
-            val pointerAngle = Math.toRadians(dAz.toDouble())
-            val pointerLen = radius * 0.55f
-            val px = cx + pointerLen * cos(pointerAngle).toFloat()
-            val py = cy + pointerLen * sin(pointerAngle).toFloat()
-
-            // 指针线
-            drawLine(
-                color = AccentBlue,
-                start = Offset(cx, cy),
-                end = Offset(px, py),
-                strokeWidth = 4f
-            )
-
-            // 指针头部圆点
+            // 外圈
             drawCircle(
-                color = AccentBlue,
-                radius = 8f,
-                center = Offset(px, py)
+                color = Color(0x30FFFFFF),
+                radius = radius,
+                center = Offset(cx, cy),
+                style = Stroke(width = 2f)
             )
 
-            // 角度差文字
-            val diffText = "${"%.1f".format(kotlin.math.abs(dAz))}°"
-            val diffPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.parseColor("#2979FF")
-                textSize = 32f
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
+            // 内圈
+            drawCircle(
+                color = Color(0x15FFFFFF),
+                radius = radius * 0.85f,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1f)
+            )
+
+            // 刻度线
+            for (deg in 0 until 360 step 5) {
+                val angle = Math.toRadians(deg.toDouble() - orientation.azimuth.toDouble())
+                val isMajor = deg % 30 == 0
+                val innerR = if (isMajor) radius * 0.78f else radius * 0.85f
+                val outerR = radius * 0.92f
+
+                val x1 = cx + innerR * cos(angle).toFloat()
+                val y1 = cy + innerR * sin(angle).toFloat()
+                val x2 = cx + outerR * cos(angle).toFloat()
+                val y2 = cy + outerR * sin(angle).toFloat()
+
+                drawLine(
+                    color = if (isMajor) Color(0x60FFFFFF) else Color(0x30FFFFFF),
+                    start = Offset(x1, y1),
+                    end = Offset(x2, y2),
+                    strokeWidth = if (isMajor) 2f else 1f
+                )
             }
-            val textX = cx + (pointerLen + 30f) * cos(pointerAngle).toFloat()
-            val textY = cy + (pointerLen + 30f) * sin(pointerAngle).toFloat() + 10f
-            drawContext.canvas.nativeCanvas.drawText(diffText, textX, textY, diffPaint)
 
-            // 红色十字卫星标记 (在指针末端)
-            val crossSize = 12f
-            val crossX = px
-            val crossY = py
-            drawLine(
-                color = AccentRed,
-                start = Offset(crossX - crossSize, crossY),
-                end = Offset(crossX + crossSize, crossY),
-                strokeWidth = 3f
+            // 中心点
+            drawCircle(
+                color = Color(0x40FFFFFF),
+                radius = 4f,
+                center = Offset(cx, cy)
             )
-            drawLine(
-                color = AccentRed,
-                start = Offset(crossX, crossY - crossSize),
-                end = Offset(crossX, crossY + crossSize),
-                strokeWidth = 3f
-            )
+
+            // 绘制卫星指针和标记
+            satPosition?.let { pos ->
+                var azDiff = pos.azimuth - orientation.azimuth
+                if (azDiff > 180) azDiff -= 360
+                if (azDiff < -180) azDiff += 360
+
+                val pointerAngle = Math.toRadians(azDiff)
+                val pointerLen = radius * 0.55f
+                val px = cx + pointerLen * cos(pointerAngle).toFloat()
+                val py = cy + pointerLen * sin(pointerAngle).toFloat()
+
+                // 指针线
+                drawLine(
+                    color = AccentBlue,
+                    start = Offset(cx, cy),
+                    end = Offset(px, py),
+                    strokeWidth = 4f
+                )
+
+                // 指针头部圆点
+                drawCircle(
+                    color = AccentBlue,
+                    radius = 8f,
+                    center = Offset(px, py)
+                )
+
+                // 红色十字卫星标记
+                val crossSize = 12f
+                drawLine(
+                    color = AccentRed,
+                    start = Offset(px - crossSize, py),
+                    end = Offset(px + crossSize, py),
+                    strokeWidth = 3f
+                )
+                drawLine(
+                    color = AccentRed,
+                    start = Offset(px, py - crossSize),
+                    end = Offset(px, py + crossSize),
+                    strokeWidth = 3f
+                )
+            }
+        }
+
+        // 方向标签 (使用Compose Text叠加在Canvas上)
+        val directions = listOf(
+            Triple("北", 0f, Alignment.TopCenter),
+            Triple("东", 90f, Alignment.CenterEnd),
+            Triple("南", 180f, Alignment.BottomCenter),
+            Triple("西", 270f, Alignment.CenterStart)
+        )
+
+        directions.forEach { (label, deg, align) ->
+            val angle = Math.toRadians(deg - orientation.azimuth.toDouble())
+            val labelR = 0.30f // 相对于Box宽度的比例
+            val offsetX = (labelR * cos(angle)).toFloat()
+            val offsetY = (labelR * sin(angle)).toFloat()
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = align
+            ) {
+                Text(
+                    text = label,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.offset(
+                        x = (offsetX * 200).dp,
+                        y = (offsetY * 200).dp
+                    )
+                )
+            }
+        }
+
+        // 角度差文字
+        satPosition?.let { pos ->
+            var azDiff = pos.azimuth - orientation.azimuth
+            if (azDiff > 180) azDiff -= 360
+            if (azDiff < -180) azDiff += 360
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                val angleRad = Math.toRadians(azDiff)
+                val textR = 0.20f
+                Text(
+                    text = "${"%.1f".format(kotlin.math.abs(azDiff))}°",
+                    color = AccentBlue,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.offset(
+                        x = (textR * cos(angleRad) * 200).dp,
+                        y = (textR * sin(angleRad) * 200).dp
+                    )
+                )
+            }
 
             // 卫星名称
-            val namePaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.RED
-                textSize = 24f
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            val nameY = crossY + crossSize + 20f
-            drawContext.canvas.nativeCanvas.drawText(
-                pos.satellite.name.split(" ")[0],
-                crossX,
-                nameY,
-                namePaint
-            )
-
-            // 如果接近对准，显示绿色高亮弧
-            if (kotlin.math.abs(dAz) < 10) {
-                val arcStart = Math.toRadians(-10.0 - orientation.azimuth.toDouble())
-                val arcEnd = Math.toRadians(10.0 - orientation.azimuth.toDouble())
-                // 简化：在正确方向画一段绿色弧线
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                val nameR = 0.38f
+                Text(
+                    text = pos.satellite.name.split(" ")[0],
+                    color = AccentRed,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.offset(
+                        x = (nameR * cos(angleRad) * 200).dp,
+                        y = (nameR * sin(angleRad) * 200).dp + 20.dp
+                    )
+                )
             }
         }
     }
@@ -315,7 +341,7 @@ fun ElevationBar(
     modifier: Modifier = Modifier,
     satPosition: SatellitePosition?
 ) {
-    Box(modifier = modifier.width(40.dp).height(200.dp)) {
+    Box(modifier = modifier.width(50.dp).height(200.dp)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
@@ -329,68 +355,61 @@ fun ElevationBar(
                 size = androidx.compose.ui.geometry.Size(barWidth, h)
             )
 
-            // 刻度
-            val tickPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.parseColor("#60FFFFFF")
-                textSize = 18f
-                isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.LEFT
-            }
+            // 刻度线
             for (el in listOf(0, 15, 30, 45, 60, 75, 90)) {
                 val y = h - (el / 90f) * h
                 drawLine(
                     color = Color(0x60FFFFFF),
                     start = Offset(barLeft + barWidth, y),
-                    end = Offset(barLeft + barWidth + 10f, y),
+                    end = Offset(barLeft + barWidth + 8f, y),
                     strokeWidth = 1f
-                )
-                drawContext.canvas.nativeCanvas.drawText(
-                    "${el}°",
-                    barLeft + barWidth + 14f,
-                    y + 5f,
-                    tickPaint
                 )
             }
 
             // 当前仰角指示
             satPosition?.let { pos ->
                 val elY = h - (pos.elevation.toFloat() / 90f) * h
-                // 填充到当前仰角
                 drawRect(
                     color = AccentBlue.copy(alpha = 0.6f),
                     topLeft = Offset(barLeft, elY.coerceIn(0f, h)),
                     size = androidx.compose.ui.geometry.Size(barWidth, (h - elY).coerceIn(0f, h))
                 )
-                // 指示线
                 drawLine(
                     color = AccentBlue,
-                    start = Offset(barLeft - 5f, elY),
-                    end = Offset(barLeft + barWidth + 5f, elY),
+                    start = Offset(barLeft - 4f, elY),
+                    end = Offset(barLeft + barWidth + 4f, elY),
                     strokeWidth = 2f
                 )
-                // 数值
-                val valPaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.parseColor("#2979FF")
-                    textSize = 22f
-                    isAntiAlias = true
-                    textAlign = android.graphics.Paint.Align.LEFT
-                }
-                drawContext.canvas.nativeCanvas.drawText(
+            }
+        }
+
+        // 刻度标签
+        Column(
+            modifier = Modifier.fillMaxHeight().padding(start = 32.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            listOf(90, 75, 60, 45, 30, 15, 0).forEach { el ->
+                Text("${el}°", color = TextDim, fontSize = 9.sp)
+            }
+        }
+
+        // 仰角数值
+        satPosition?.let { pos ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                Text(
                     "${"%.1f".format(pos.elevation)}°",
-                    barLeft + barWidth + 14f,
-                    elY + 5f,
-                    valPaint
+                    color = AccentBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 4.dp)
                 )
             }
         }
 
         // 标签
-        Text(
-            text = "仰角",
-            color = TextSecondary,
-            fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp)
-        )
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Text("仰角", color = TextSecondary, fontSize = 11.sp)
+        }
     }
 }
 
@@ -428,7 +447,7 @@ fun BottomInfoPanel(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // 位置信息行
             Row(
@@ -475,11 +494,11 @@ fun BottomInfoPanel(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 卫星信息条
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -518,18 +537,9 @@ fun BottomInfoPanel(
 @Composable
 private fun BigNumberColumn(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            color = TextSecondary,
-            fontSize = 14.sp
-        )
+        Text(text = label, color = TextSecondary, fontSize = 14.sp)
         Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            color = color,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text = value, color = color, fontSize = 32.sp, fontWeight = FontWeight.Bold)
     }
 }
 
