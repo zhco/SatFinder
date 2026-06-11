@@ -357,16 +357,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
     val cy = h / 2f
 
     // 箭头距离中心的距离
-    val arrowDist = kotlin.math.min(w, h) * 0.35f
+    val arrowDist = if (w < h) w * 0.35f else h * 0.35f
 
     // 将角度差转换为屏幕坐标偏移
     val dx = dAz / 90f * arrowDist
     val dy = -dEl / 45f * arrowDist
 
     // 归一化到边缘
-    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-    val maxDist = arrowDist
-    val scale = if (dist > maxDist) maxDist / dist else 1f
+    val dist = dx * dx + dy * dy
+    val maxDist = arrowDist * arrowDist
+    val scale = if (dist > maxDist) arrowDist / kotlin.math.sqrt(dist) else 1f
 
     val arrowX = cx + dx * scale
     val arrowY = cy + dy * scale
@@ -417,10 +417,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
             isAntiAlias = true
         }
         val label = "${pos.satellite.name} ${"%.0f".format(pos.azimuth)}° ${"%.0f".format(pos.elevation)}°"
+        val labelOffsetY = if (arrowY > cy) 35f else -15f
         drawContext.canvas.nativeCanvas.drawText(
             label,
             arrowX - 60f,
-            arrowY + (if (arrowY > cy) 35f else -15f),
+            arrowY + labelOffsetY,
             textPaint
         )
 
