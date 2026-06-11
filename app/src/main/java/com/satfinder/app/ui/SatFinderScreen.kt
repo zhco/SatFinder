@@ -291,17 +291,17 @@ fun CompassView(
             }
         }
 
-        // 角度差文字
+        // 角度差文字和卫星名称
         satPosition?.let { pos ->
             var azDiff = pos.azimuth - orientation.azimuth
             if (azDiff > 180) azDiff -= 360
             if (azDiff < -180) azDiff += 360
+            val angleRad = Math.toRadians(azDiff)
 
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                val angleRad = Math.toRadians(azDiff)
                 val textR = 0.20f
                 Text(
                     text = "${"%.1f".format(kotlin.math.abs(azDiff))}°",
@@ -315,7 +315,6 @@ fun CompassView(
                 )
             }
 
-            // 卫星名称
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
