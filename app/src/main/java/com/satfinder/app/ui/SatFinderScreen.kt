@@ -246,22 +246,23 @@ fun ARCameraOverlay(
         // ===== 雷达图：显示所有可见卫星的方位角和仰角 =====
         drawRadarView(visibleSatellites, satPosition, w, h)
 
-        // 绘制选中卫星标记
+        // ===== 绘制选中卫星标记或方向箭头 =====
         satPosition?.let { pos ->
-            if (pos.isVisible) {
-                drawSatMarker(pos, orientation, w, h, true)
-            }
+            drawSatelliteIndicator(pos, orientation, w, h, true)
         }
 
-        // 绘制所有可见卫星标记
+        // 绘制其他可见卫星标记
         visibleSatellites.forEach { pos ->
             if (pos.satellite.isDefault) return@forEach
-            drawSatMarker(pos, orientation, w, h, false)
+            drawSatelliteIndicator(pos, orientation, w, h, false)
         }
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatMarker(
+/**
+ * 绘制卫星指示器 - 在视场内显示标记，不在视场内显示方向箭头
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatelliteIndicator(
     pos: SatellitePosition,
     orientation: DeviceOrientation,
     w: Float,
@@ -282,12 +283,14 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatMarker(
         verticalFOV = vFOV
     )
 
-    if (screenPos != null) {
-        val (sx, sy) = screenPos
-        val markerColor = if (isSelected) AccentYellow else AccentCyan
-        val markerRadius = if (isSelected) 18f else 12f
+    val markerColor = if (isSelected) AccentYellow else AccentCyan
 
-        // 引导线
+    if (screenPos != null) {
+        // ===== 卫星在视场内 - 绘制标记 =====
+        val (sx, sy) = screenPos
+        val markerRadius = if (isSelected) 24f else 14f
+
+        // 引导线（从中心到卫星）
         if (isSelected) {
             drawLine(
                 color = GuideLineColor,
@@ -297,6 +300,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatMarker(
             )
         }
 
+        // 外圈发光效果
+        drawCircle(
+            color = markerColor.copy(alpha = 0.3f),
+            radius = markerRadius + 8f,
+            center = Offset(sx, sy)
+        )
+
         // 外圈
         drawCircle(
             color = markerColor,
@@ -304,72 +314,136 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSatMarker(
             center = Offset(sx, sy),
             style = Stroke(width = if (isSelected) 3f else 2f)
         )
-        // 内圈
+        // 内圈实心
         drawCircle(
             color = markerColor,
-            radius = 4f,
+            radius = 6f,
             center = Offset(sx, sy)
         )
 
         // 标签
-        val label = if (isSelected) {
-            "${pos.satellite.name}\n%.1f° / %.1f°".format(pos.azimuth, pos.elevation)
-        } else {
-            pos.satellite.name
+        if (isSelected) {
+            val label = "${pos.satellite.name}  ${"%.1f".format(pos.azimuth)}° / ${"%.1f".format(pos.elevation)}°"
+            val paint = android.graphics.Paint().apply {
+                color = android.graphics.Color.YELLOW
+                textSize = 32f
+                isAntiAlias = true
+            }
+            drawContext.canvas.nativeCanvas.drawText(label, sx + markerRadius + 12f, sy - 5f, paint)
         }
+    } else {
+        // ===== 卫星不在视场内 - 绘制方向箭头 =====
+        drawDirectionArrow(pos, orientation, w, h, isSelected)
+    }
+}
 
-        val paint = android.graphics.Paint().apply {
-            color = android.graphics.Color.WHITE
-            textSize = if (isSelected) 28f else 22f
+/**
+ * 绘制方向箭头 - 始终指向卫星方向
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
+    pos: SatellitePosition,
+    orientation: DeviceOrientation,
+    w: Float,
+    h: Float,
+    isSelected: Boolean
+) {
+    // 计算卫星相对于设备的方向
+    var dAz = pos.azimuth - orientation.azimuth
+    if (dAz > 180) dAz -= 360
+    if (dAz < -180) dAz += 360
+    val dEl = pos.elevation - orientation.pitch
+
+    val cx = w / 2f
+    val cy = h / 2f
+
+    // 箭头距离中心的距离
+    val arrowDist = kotlin.math.min(w, h) * 0.35f
+
+    // 将角度差转换为屏幕坐标偏移
+    val dx = dAz / 90f * arrowDist
+    val dy = -dEl / 45f * arrowDist
+
+    // 归一化到边缘
+    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+    val maxDist = arrowDist
+    val scale = if (dist > maxDist) maxDist / dist else 1f
+
+    val arrowX = cx + dx * scale
+    val arrowY = cy + dy * scale
+
+    val arrowColor = if (isSelected) AccentYellow else AccentCyan
+
+    // 绘制从中心到箭头的虚线
+    if (isSelected) {
+        drawLine(
+            color = arrowColor.copy(alpha = 0.3f),
+            start = Offset(cx, cy),
+            end = Offset(arrowX, arrowY),
+            strokeWidth = 2f
+        )
+    }
+
+    // 绘制大箭头
+    val arrowSize = if (isSelected) 30f else 18f
+    val angleRad = kotlin.math.atan2(arrowY - cy, arrowX - cx)
+    val cosA = kotlin.math.cos(angleRad).toFloat()
+    val sinA = kotlin.math.sin(angleRad).toFloat()
+
+    // 箭头主体
+    val tipX = arrowX + arrowSize * cosA
+    val tipY = arrowY + arrowSize * sinA
+    val baseX = arrowX - arrowSize * cosA
+    val baseY = arrowY - arrowSize * sinA
+
+    // 绘制三角形箭头
+    val perpX = -sinA * arrowSize * 0.5f
+    val perpY = cosA * arrowSize * 0.5f
+
+    drawPath(
+        path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(tipX, tipY)
+            lineTo(baseX + perpX, baseY + perpY)
+            lineTo(baseX - perpX, baseY - perpY)
+            close()
+        },
+        color = arrowColor
+    )
+
+    // 选中卫星显示名称和距离
+    if (isSelected) {
+        val textPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.YELLOW
+            textSize = 28f
             isAntiAlias = true
         }
-        drawContext.canvas.nativeCanvas.drawText(label, sx + markerRadius + 8f, sy - 10f, paint)
-    } else {
-        // 边缘箭头
-        val arrow = SatelliteCalculator.getEdgeArrowPosition(
-            satAzimuth = pos.azimuth,
-            satElevation = pos.elevation,
-            deviceAzimuth = orientation.azimuth.toDouble(),
-            devicePitch = orientation.pitch.toDouble(),
-            screenWidth = w.toInt(),
-            screenHeight = h.toInt()
+        val label = "${pos.satellite.name} ${"%.0f".format(pos.azimuth)}° ${"%.0f".format(pos.elevation)}°"
+        drawContext.canvas.nativeCanvas.drawText(
+            label,
+            arrowX - 60f,
+            arrowY + (if (arrowY > cy) 35f else -15f),
+            textPaint
         )
-        val (ax, ay, angle) = arrow
-        val arrowColor = if (isSelected) AccentYellow else Color(0x80FFFFFF)
 
-        rotate(angle) {
-            drawLine(
-                color = arrowColor,
-                start = Offset(ax, ay),
-                end = Offset(ax + 20f, ay),
-                strokeWidth = 3f
-            )
-            drawLine(
-                color = arrowColor,
-                start = Offset(ax + 20f, ay),
-                end = Offset(ax + 14f, ay - 6f),
-                strokeWidth = 3f
-            )
-            drawLine(
-                color = arrowColor,
-                start = Offset(ax + 20f, ay),
-                end = Offset(ax + 14f, ay + 6f),
-                strokeWidth = 3f
-            )
+        // 显示"向左转/向右转"提示
+        val turnText = when {
+            dAz < -15 -> "<< 向左转 ${"%.0f".format(-dAz)}°"
+            dAz > 15 -> "向右转 ${"%.0f".format(dAz)}° >>"
+            dEl < -10 -> "向上抬 ${"%.0f".format(-dEl)}°"
+            dEl > 10 -> "向下压 ${"%.0f".format(dEl)}°"
+            else -> "对准了!"
         }
-
-        if (isSelected) {
-            drawContext.canvas.nativeCanvas.drawText(
-                "${pos.satellite.name} %.1f°".format(pos.azimuth),
-                ax - 30f,
-                ay + 15f,
-                android.graphics.Paint().apply {
-                    color = android.graphics.Color.YELLOW
-                    textSize = 24f
-                    isAntiAlias = true
-                }
-            )
+        val turnPaint = android.graphics.Paint().apply {
+            color = if (turnText == "对准了!") android.graphics.Color.GREEN else android.graphics.Color.parseColor("#FFEA00")
+            textSize = 36f
+            isAntiAlias = true
+            isFakeBoldText = true
         }
+        drawContext.canvas.nativeCanvas.drawText(
+            turnText,
+            cx - 80f,
+            cy + 80f,
+            turnPaint
+        )
     }
 }
 
