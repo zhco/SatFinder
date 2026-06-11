@@ -189,9 +189,13 @@ fun CompassView(
                 style = Stroke(width = 1f)
             )
 
-            // 刻度线 - 固定不旋转！0°在上(北)，顺时针增加
+            // ===== 刻度线随设备旋转 =====
+            // 当设备朝北(0°)时，0°刻度在上
+            // 当设备转向其他方向时，刻度盘跟着旋转
             for (deg in 0 until 360 step 5) {
-                val canvasAngle = Math.toRadians(deg.toDouble() - 90.0)
+                // 刻度位置 = 刻度角度 - 设备方位角
+                // 这样当设备转动时，刻度会反向旋转，保持相对位置
+                val canvasAngle = Math.toRadians(deg.toDouble() - orientation.azimuth.toDouble() - 90.0)
                 val isMajor = deg % 30 == 0
                 val innerR = if (isMajor) radius * 0.78f else radius * 0.85f
                 val outerR = radius * 0.92f
@@ -216,12 +220,15 @@ fun CompassView(
                 center = Offset(cx, cy)
             )
 
-            // ===== 红色卫星指针（固定位置，不随设备转动）=====
+            // ===== 红色卫星标记（随刻度一起旋转）=====
             satPosition?.let { pos ->
-                // 卫星方位角转换为Canvas角度
-                // 卫星方位角219.7° = 西南偏南方向
-                // Canvas: 0°=右(东)，需要-90°把北转到上方
-                val satCanvasAngle = Math.toRadians(pos.azimuth - 90.0)
+                // 卫星在罗盘上的位置 = 卫星方位角 - 设备方位角
+                // 这样当设备转向卫星方向时，卫星标记会移动到12点位置
+                var relativeAz = pos.azimuth - orientation.azimuth
+                if (relativeAz > 180) relativeAz -= 360
+                if (relativeAz < -180) relativeAz += 360
+
+                val satCanvasAngle = Math.toRadians(relativeAz - 90.0)
                 val pointerLen = radius * 0.55f
                 val satX = cx + pointerLen * cos(satCanvasAngle).toFloat()
                 val satY = cy + pointerLen * sin(satCanvasAngle).toFloat()
@@ -247,7 +254,7 @@ fun CompassView(
                     currentLen += dashLen + gapLen
                 }
 
-                // 红色十字卫星标记（固定在卫星方位角位置）
+                // 红色十字卫星标记
                 val crossSize = 12f
                 drawLine(
                     color = AccentRed,
@@ -264,8 +271,8 @@ fun CompassView(
 
                 // 红色弧线标记卫星方向扇区（±5度）
                 val arcRadius = radius * 0.95f
-                val arcStart = Math.toRadians(pos.azimuth - 5.0 - 90.0)
-                val arcEnd = Math.toRadians(pos.azimuth + 5.0 - 90.0)
+                val arcStart = Math.toRadians(relativeAz - 5.0 - 90.0)
+                val arcEnd = Math.toRadians(relativeAz + 5.0 - 90.0)
                 val arcSteps = 20
                 val arcStep = (arcEnd - arcStart) / arcSteps
                 for (i in 0 until arcSteps) {
@@ -286,13 +293,11 @@ fun CompassView(
                 }
             }
 
-            // ===== 蓝色设备指针（固定指向正上方，代表设备当前朝向）=====
-            // 设备指针永远指向12点方向（正上方）
+            // ===== 蓝色设备指针（固定指向正上方）=====
             val devicePointerLen = radius * 0.50f
-            val deviceX = cx  // 正上方，x不变
+            val deviceX = cx
             val deviceY = cy - devicePointerLen
 
-            // 蓝色指针线
             drawLine(
                 color = AccentBlue,
                 start = Offset(cx, cy),
@@ -300,7 +305,6 @@ fun CompassView(
                 strokeWidth = 5f
             )
 
-            // 蓝色指针头部圆点
             drawCircle(
                 color = AccentBlue,
                 radius = 10f,
@@ -308,7 +312,7 @@ fun CompassView(
             )
         }
 
-        // 固定方向标签 (北在上，南在下，东在右，西在左)
+        // 固定方向标签（北在上，南在下，东在右，西在左）
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Text("北", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 4.dp))
@@ -326,7 +330,7 @@ fun CompassView(
                 modifier = Modifier.padding(start = 4.dp))
         }
 
-        // 中央偏差数值和"偏差→"标签
+        // 中央偏差数值
         satPosition?.let { pos ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -344,8 +348,12 @@ fun CompassView(
                 }
             }
 
-            // 卫星名称（固定在卫星方向）
-            val satCanvasAngle = Math.toRadians(pos.azimuth - 90.0)
+            // 卫星名称和角度（随卫星标记一起旋转）
+            var relativeAz = pos.azimuth - orientation.azimuth
+            if (relativeAz > 180) relativeAz -= 360
+            if (relativeAz < -180) relativeAz += 360
+            val satCanvasAngle = Math.toRadians(relativeAz - 90.0)
+
             val nameR = 0.32f
             val nameOffsetX = (nameR * cos(satCanvasAngle) * 250).toFloat()
             val nameOffsetY = (nameR * sin(satCanvasAngle) * 250).toFloat() + 30f
@@ -363,7 +371,6 @@ fun CompassView(
                 )
             }
 
-            // 卫星方位角数值（在卫星方向）
             val angleR = 0.22f
             val angleOffsetX = (angleR * cos(satCanvasAngle) * 250).toFloat()
             val angleOffsetY = (angleR * sin(satCanvasAngle) * 250).toFloat() + 10f
