@@ -25,11 +25,16 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
     private val remappedMatrix = FloatArray(9)
     private val orientationAngles = FloatArray(3)
 
-    // 低通滤波系数
-    private val ALPHA = 0.15f
+    // 低通滤波系数 - 更强的平滑（95%旧值 + 5%新值）
+    private val ALPHA = 0.05f
     private var smoothedAzimuth = 0f
     private var smoothedPitch = 0f
     private var smoothedRoll = 0f
+
+    // 最小变化阈值（度），小于此值视为抖动不更新
+    private val MIN_CHANGE_THRESHOLD = 0.5f
+    private var lastUpdateTime = 0L
+    private val UPDATE_INTERVAL_MS = 50L // 20fps更新频率
 
     // 磁偏角
     private var declination = 0f
@@ -43,11 +48,12 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         if (isRunning) return
         isRunning = true
 
+        // 使用SENSOR_DELAY_UI降低采样率，减少CPU负载和噪声
         sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also { accel ->
-            sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_UI)
         }
         sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.also { mag ->
-            sensorManager.registerListener(this, mag, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, mag, SensorManager.SENSOR_DELAY_UI)
         }
     }
 
@@ -125,6 +131,21 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         smoothedPitch = smooth(pitch, smoothedPitch)
         smoothedRoll = smooth(roll, smoothedRoll)
 
+        // 限制更新频率和最小变化阈值，过滤微小抖动
+        val now = System.currentTimeMillis()
+        if (now - lastUpdateTime < UPDATE_INTERVAL_MS) return
+
+        val current = orientationState.value
+        val azDiff = angleDiff(smoothedAzimuth, current.azimuth)
+        val pitchDiff = kotlin.math.abs(smoothedPitch - current.pitch)
+        val rollDiff = kotlin.math.abs(smoothedRoll - current.roll)
+
+        // 只有变化超过阈值才更新，避免微小抖动
+        if (azDiff < MIN_CHANGE_THRESHOLD && pitchDiff < MIN_CHANGE_THRESHOLD && rollDiff < MIN_CHANGE_THRESHOLD) {
+            return
+        }
+
+        lastUpdateTime = now
         orientationState.value = DeviceOrientation(
             azimuth = smoothedAzimuth,
             pitch = smoothedPitch,
@@ -141,5 +162,11 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         if (result < 0) result += 360f
         if (result >= 360f) result -= 360f
         return result
+    }
+
+    private fun angleDiff(a: Float, b: Float): Float {
+        var diff = kotlin.math.abs(a - b)
+        if (diff > 180f) diff = 360f - diff
+        return diff
     }
 }
