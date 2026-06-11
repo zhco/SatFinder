@@ -62,22 +62,30 @@ fun SatFinderScreen(
         } else emptyList()
     }
 
+    // 计算方位偏差
+    val azimuthDiff = if (satPosition != null) {
+        var diff = kotlin.math.abs(satPosition.azimuth - orientation.azimuth)
+        if (diff > 180) diff = 360 - diff
+        diff
+    } else 0.0
+
     Box(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶部标题栏
-            TopBar(selectedSatellite, satPosition, orientation)
+            TopBar(selectedSatellite, azimuthDiff)
 
             // 中央罗盘区域
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 CompassView(
                     modifier = Modifier.fillMaxSize(),
                     orientation = orientation,
-                    satPosition = satPosition
+                    satPosition = satPosition,
+                    azimuthDiff = azimuthDiff
                 )
 
                 // 右侧仰角条
                 ElevationBar(
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
                     satPosition = satPosition
                 )
             }
@@ -87,6 +95,7 @@ fun SatFinderScreen(
                 satPosition = satPosition,
                 selectedSatellite = selectedSatellite,
                 location = location,
+                azimuthDiff = azimuthDiff,
                 visibleCount = visibleSatellites.size,
                 onToggleList = { showSatelliteList = !showSatelliteList },
                 onManualLocation = { showManualLocation = true }
@@ -118,38 +127,34 @@ fun SatFinderScreen(
 @Composable
 fun TopBar(
     selectedSatellite: Satellite,
-    satPosition: SatellitePosition?,
-    orientation: DeviceOrientation
+    azimuthDiff: Double
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${selectedSatellite.name.split(" ")[0]} 卫星寻星",
-                color = TextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "${selectedSatellite.name.split(" ")[0]} 卫星寻星",
+            color = TextPrimary,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
 
-            val statusText = if (satPosition != null) {
-                val dAz = kotlin.math.abs(satPosition.azimuth - orientation.azimuth)
-                val dEl = kotlin.math.abs(satPosition.elevation - orientation.pitch)
-                when {
-                    dAz < 3 && dEl < 3 -> "已对准目标!"
-                    dAz < 10 && dEl < 10 -> "接近目标，请微调方向..."
-                    else -> "转动手机对准卫星方向"
-                }
-            } else "等待定位..."
-
-            Text(
-                text = statusText,
-                color = if (statusText == "已对准目标!") AccentGreen else AccentOrange,
-                fontSize = 14.sp
-            )
+        val turnText = when {
+            azimuthDiff < 3 -> "已对准目标!"
+            azimuthDiff < 10 -> "接近目标，请微调方向..."
+            else -> {
+                // 判断向左还是向右转
+                "请向左转 ${"%.0f".format(azimuthDiff)}°"
+            }
         }
+
+        Text(
+            text = turnText,
+            color = if (azimuthDiff < 3) AccentGreen else AccentOrange,
+            fontSize = 14.sp
+        )
     }
 }
 
@@ -157,21 +162,16 @@ fun TopBar(
 fun CompassView(
     modifier: Modifier = Modifier,
     orientation: DeviceOrientation,
-    satPosition: SatellitePosition?
+    satPosition: SatellitePosition?,
+    azimuthDiff: Double
 ) {
-    // 计算卫星相对于设备的方向
-    var dAz by remember { mutableStateOf(0.0) }
-    var pointerX by remember { mutableStateOf(0f) }
-    var pointerY by remember { mutableStateOf(0f) }
-    var diffText by remember { mutableStateOf("") }
-
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
             val cx = w / 2f
             val cy = h / 2f
-            val radius = kotlin.math.min(w, h) * 0.42f
+            val radius = kotlin.math.min(w, h) * 0.40f
 
             // 外圈
             drawCircle(
@@ -189,7 +189,7 @@ fun CompassView(
                 style = Stroke(width = 1f)
             )
 
-            // 刻度线
+            // 刻度线 - 随设备方位角旋转
             for (deg in 0 until 360 step 5) {
                 val angle = Math.toRadians(deg.toDouble() - orientation.azimuth.toDouble())
                 val isMajor = deg % 30 == 0
@@ -211,8 +211,8 @@ fun CompassView(
 
             // 中心点
             drawCircle(
-                color = Color(0x40FFFFFF),
-                radius = 4f,
+                color = Color(0x60FFFFFF),
+                radius = 5f,
                 center = Offset(cx, cy)
             )
 
@@ -227,23 +227,23 @@ fun CompassView(
                 val px = cx + pointerLen * cos(pointerAngle).toFloat()
                 val py = cy + pointerLen * sin(pointerAngle).toFloat()
 
-                // 指针线
+                // 指针线 (蓝色)
                 drawLine(
                     color = AccentBlue,
                     start = Offset(cx, cy),
                     end = Offset(px, py),
-                    strokeWidth = 4f
+                    strokeWidth = 5f
                 )
 
                 // 指针头部圆点
                 drawCircle(
                     color = AccentBlue,
-                    radius = 8f,
+                    radius = 10f,
                     center = Offset(px, py)
                 )
 
                 // 红色十字卫星标记
-                val crossSize = 12f
+                val crossSize = 14f
                 drawLine(
                     color = AccentRed,
                     start = Offset(px - crossSize, py),
@@ -256,80 +256,80 @@ fun CompassView(
                     end = Offset(px, py + crossSize),
                     strokeWidth = 3f
                 )
-            }
-        }
 
-        // 方向标签 (使用Compose Text叠加在Canvas上)
-        val directions = listOf(
-            Triple("北", 0f, Alignment.TopCenter),
-            Triple("东", 90f, Alignment.CenterEnd),
-            Triple("南", 180f, Alignment.BottomCenter),
-            Triple("西", 270f, Alignment.CenterStart)
-        )
-
-        directions.forEach { (label, deg, align) ->
-            val angle = Math.toRadians(deg - orientation.azimuth.toDouble())
-            val labelR = 0.30f // 相对于Box宽度的比例
-            val offsetX = (labelR * cos(angle)).toFloat()
-            val offsetY = (labelR * sin(angle)).toFloat()
-
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = align
-            ) {
-                Text(
-                    text = label,
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.offset(
-                        x = (offsetX * 200).dp,
-                        y = (offsetY * 200).dp
+                // 偏差弧线 (当偏差较小时显示绿色弧)
+                if (kotlin.math.abs(azDiff) < 30) {
+                    val arcColor = if (kotlin.math.abs(azDiff) < 5) AccentGreen else AccentOrange
+                    // 在正确方向画一小段弧线
+                    val arcRadius = radius * 0.95f
+                    val startAngle = Math.toRadians(azDiff - 5)
+                    val endAngle = Math.toRadians(azDiff + 5)
+                    // 简化：画一条短线标记正确方向
+                    val markX = cx + arcRadius * cos(pointerAngle).toFloat()
+                    val markY = cy + arcRadius * sin(pointerAngle).toFloat()
+                    drawCircle(
+                        color = arcColor.copy(alpha = 0.5f),
+                        radius = 8f,
+                        center = Offset(markX, markY)
                     )
-                )
+                }
             }
         }
 
-        // 角度差文字和卫星名称
+        // 固定方向标签 (北在上，南在下，东在右，西在左)
+        // 这些标签不随罗盘旋转，固定在屏幕四个方向
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Text("北", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp))
+        }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Text("南", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp))
+        }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            Text("东", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 8.dp))
+        }
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+            Text("西", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 8.dp))
+        }
+
+        // 中央偏差数值
         satPosition?.let { pos ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${"%.1f".format(azimuthDiff)}°",
+                        color = AccentBlue,
+                        fontSize = 42.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "偏差",
+                        color = AccentBlue,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            // 卫星名称 (在指针方向)
             var azDiff = pos.azimuth - orientation.azimuth
             if (azDiff > 180) azDiff -= 360
             if (azDiff < -180) azDiff += 360
             val angleRad = Math.toRadians(azDiff)
+            val nameR = 0.30f
 
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                val textR = 0.20f
-                Text(
-                    text = "${"%.1f".format(kotlin.math.abs(azDiff))}°",
-                    color = AccentBlue,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.offset(
-                        x = (textR * cos(angleRad) * 200).dp,
-                        y = (textR * sin(angleRad) * 200).dp
-                    )
-                )
-            }
-
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                val nameR = 0.38f
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = pos.satellite.name.split(" ")[0],
                     color = AccentRed,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.offset(
-                        x = (nameR * cos(angleRad) * 200).dp,
-                        y = (nameR * sin(angleRad) * 200).dp + 20.dp
+                        x = (nameR * cos(angleRad) * 250).dp,
+                        y = (nameR * sin(angleRad) * 250).dp + 25.dp
                     )
-                )
             }
         }
     }
@@ -340,11 +340,22 @@ fun ElevationBar(
     modifier: Modifier = Modifier,
     satPosition: SatellitePosition?
 ) {
-    Box(modifier = modifier.width(50.dp).height(200.dp)) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.width(45.dp).height(220.dp)) {
+        // 刻度标签 (在Canvas左侧)
+        Column(
+            modifier = Modifier.fillMaxHeight().padding(end = 28.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.End
+        ) {
+            listOf(90, 75, 60, 45, 30, 15, 0).forEach { el ->
+                Text("${el}°", color = TextDim, fontSize = 10.sp)
+            }
+        }
+
+        Canvas(modifier = Modifier.fillMaxSize().padding(start = 20.dp)) {
             val w = size.width
             val h = size.height
-            val barWidth = w * 0.5f
+            val barWidth = w * 0.6f
             val barLeft = (w - barWidth) / 2f
 
             // 背景条
@@ -358,9 +369,9 @@ fun ElevationBar(
             for (el in listOf(0, 15, 30, 45, 60, 75, 90)) {
                 val y = h - (el / 90f) * h
                 drawLine(
-                    color = Color(0x60FFFFFF),
+                    color = Color(0x40FFFFFF),
                     start = Offset(barLeft + barWidth, y),
-                    end = Offset(barLeft + barWidth + 8f, y),
+                    end = Offset(barLeft + barWidth + 6f, y),
                     strokeWidth = 1f
                 )
             }
@@ -368,46 +379,39 @@ fun ElevationBar(
             // 当前仰角指示
             satPosition?.let { pos ->
                 val elY = h - (pos.elevation.toFloat() / 90f) * h
+                // 填充到当前仰角
                 drawRect(
-                    color = AccentBlue.copy(alpha = 0.6f),
+                    color = AccentBlue.copy(alpha = 0.5f),
                     topLeft = Offset(barLeft, elY.coerceIn(0f, h)),
                     size = androidx.compose.ui.geometry.Size(barWidth, (h - elY).coerceIn(0f, h))
                 )
+                // 指示线
                 drawLine(
                     color = AccentBlue,
-                    start = Offset(barLeft - 4f, elY),
-                    end = Offset(barLeft + barWidth + 4f, elY),
+                    start = Offset(barLeft - 3f, elY),
+                    end = Offset(barLeft + barWidth + 3f, elY),
                     strokeWidth = 2f
                 )
             }
         }
 
-        // 刻度标签
-        Column(
-            modifier = Modifier.fillMaxHeight().padding(start = 32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            listOf(90, 75, 60, 45, 30, 15, 0).forEach { el ->
-                Text("${el}°", color = TextDim, fontSize = 9.sp)
-            }
-        }
-
-        // 仰角数值
+        // 仰角数值 (在条右侧)
         satPosition?.let { pos ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
                 Text(
                     "${"%.1f".format(pos.elevation)}°",
                     color = AccentBlue,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 4.dp)
+                    modifier = Modifier.padding(end = 2.dp)
                 )
             }
         }
 
         // 标签
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            Text("仰角", color = TextSecondary, fontSize = 11.sp)
+            Text("仰角", color = TextSecondary, fontSize = 11.sp,
+                modifier = Modifier.padding(start = 20.dp))
         }
     }
 }
@@ -418,6 +422,7 @@ fun BottomInfoPanel(
     satPosition: SatellitePosition?,
     selectedSatellite: Satellite,
     location: GpsLocation?,
+    azimuthDiff: Double,
     visibleCount: Int,
     onToggleList: () -> Unit,
     onManualLocation: () -> Unit
@@ -471,11 +476,11 @@ fun BottomInfoPanel(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 方位偏差
+            // 方位偏差 (蓝色)
             Text(
-                text = "方位偏差: ${"%.1f".format(satPosition.azimuth)}°",
-                color = TextSecondary,
-                fontSize = 14.sp,
+                text = "方位偏差: ${"%.1f".format(azimuthDiff)}°",
+                color = AccentBlue,
+                fontSize = 15.sp,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
         } else {
@@ -495,14 +500,14 @@ fun BottomInfoPanel(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // 卫星信息条
+        // 卫星信息条 (带斜距)
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${selectedSatellite.name.split(" ")[0]} | ${selectedSatellite.orbitLongitude}°E | ${selectedSatellite.band}",
+                text = "${selectedSatellite.name.split(" ")[0]} | ${selectedSatellite.orbitLongitude}°E | ${selectedSatellite.band} | 35786km",
                 color = TextDim,
                 fontSize = 12.sp
             )
