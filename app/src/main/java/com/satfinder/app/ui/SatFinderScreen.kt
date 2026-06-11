@@ -330,6 +330,7 @@ fun CompassView(
                         x = (nameR * cos(angleRad) * 250).dp,
                         y = (nameR * sin(angleRad) * 250).dp + 25.dp
                     )
+                )
             }
         }
     }
