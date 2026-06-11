@@ -108,10 +108,9 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
      * rotation_vector已经由硬件融合了加速度计、陀螺仪、磁力计
      */
     private fun updateOrientationFromRotationVector() {
-        val success = SensorManager.getRotationMatrixFromVector(
+        SensorManager.getRotationMatrixFromVector(
             rotationMatrix, rotationVectorValues
         )
-        if (success == false) return
 
         // 重映射坐标系（竖屏持握）
         SensorManager.remapCoordinateSystem(
