@@ -368,8 +368,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
     val maxDist = arrowDist * arrowDist
     val scale = if (dist > maxDist) arrowDist / kotlin.math.sqrt(dist) else 1f
 
-    val arrowX = cx + dx * scale
-    val arrowY = cy + dy * scale
+    val arrowX = cx + dx * scale.toFloat()
+    val arrowY = cy + dy * scale.toFloat()
 
     val arrowColor = if (isSelected) AccentYellow else AccentCyan
 
@@ -417,7 +417,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDirectionArrow(
             isAntiAlias = true
         }
         val label = "${pos.satellite.name} ${"%.0f".format(pos.azimuth)}° ${"%.0f".format(pos.elevation)}°"
-        val labelOffsetY = if (arrowY > cy) 35f else -15f
+        val labelOffsetY = if (arrowY.compareTo(cy) > 0) 35f else -15f
         drawContext.canvas.nativeCanvas.drawText(
             label,
             arrowX - 60f,
