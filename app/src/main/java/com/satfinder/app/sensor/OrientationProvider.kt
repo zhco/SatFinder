@@ -40,9 +40,17 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
     private var declination = 0f
     private var declinationSet = false
 
+    // 位置提供者引用（用于获取磁偏角）
+    private var locationProvider: com.satfinder.app.location.LocationProvider? = null
+
     val orientationState = mutableStateOf(DeviceOrientation())
 
     private var isRunning = false
+
+    /** 设置位置提供者，用于计算磁偏角 */
+    fun setLocationProvider(provider: com.satfinder.app.location.LocationProvider) {
+        this.locationProvider = provider
+    }
 
     fun start() {
         if (isRunning) return
@@ -109,19 +117,17 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         // 转为 0°~360°
         azimuth = (azimuth + 360f) % 360f
 
-        // 磁偏角修正（真北）
-        if (!declinationSet && orientationState.value.azimuth != 0f) {
-            val loc = com.satfinder.app.location.LocationProvider(context).locationState.value
-            if (loc != null) {
-                val geoField = GeomagneticField(
-                    loc.latitude.toFloat(),
-                    loc.longitude.toFloat(),
-                    loc.altitude.toFloat(),
-                    System.currentTimeMillis()
-                )
-                declination = geoField.declination
-                declinationSet = true
-            }
+        // 磁偏角修正（真北）- 每次位置更新时重新计算
+        val loc = locationProvider?.locationState?.value
+        if (loc != null && !declinationSet) {
+            val geoField = GeomagneticField(
+                loc.latitude.toFloat(),
+                loc.longitude.toFloat(),
+                loc.altitude.toFloat(),
+                System.currentTimeMillis()
+            )
+            declination = geoField.declination
+            declinationSet = true
         }
 
         val trueAzimuth = (azimuth + declination + 360f) % 360f

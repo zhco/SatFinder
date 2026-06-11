@@ -72,7 +72,7 @@ fun SatFinderScreen(
     Box(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶部标题栏
-            TopBar(selectedSatellite, azimuthDiff)
+            TopBar(selectedSatellite, azimuthDiff, orientation)
 
             // 中央罗盘区域
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -127,23 +127,25 @@ fun SatFinderScreen(
 @Composable
 fun TopBar(
     selectedSatellite: Satellite,
-    azimuthDiff: Double
+    azimuthDiff: Double,
+    orientation: DeviceOrientation
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "${selectedSatellite.name.split(" ")[0]} 卫星寻星",
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold
-        )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${selectedSatellite.name.split(" ")[0]} 卫星寻星",
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
 
-        val turnText = when {
-            azimuthDiff < 3 -> "已对准目标!"
-            azimuthDiff < 10 -> "接近目标，请微调方向..."
+            val turnText = when {
+                azimuthDiff < 3 -> "已对准目标!"
+                azimuthDiff < 10 -> "接近目标，请微调方向..."
             else -> {
                 // 判断向左还是向右转
                 "请向左转 ${"%.0f".format(azimuthDiff)}°"
@@ -154,6 +156,14 @@ fun TopBar(
             text = turnText,
             color = if (azimuthDiff < 3) AccentGreen else AccentOrange,
             fontSize = 14.sp
+        )
+    }
+
+        // 设备朝向调试信息
+        Text(
+            text = "设备朝向: ${"%.1f".format(orientation.azimuth)}°  俯仰: ${"%.1f".format(orientation.pitch)}°",
+            color = TextDim,
+            fontSize = 11.sp
         )
     }
 }
