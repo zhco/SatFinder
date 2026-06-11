@@ -111,7 +111,7 @@ class OrientationProvider(private val context: Context) : SensorEventListener {
         val success = SensorManager.getRotationMatrixFromVector(
             rotationMatrix, rotationVectorValues
         )
-        if (!success) return
+        if (success.not()) return
 
         // 重映射坐标系（竖屏持握）
         SensorManager.remapCoordinateSystem(
